@@ -72,6 +72,7 @@ func (id *ID) UnmarshalText(b []byte) error {
 // IDFromString returns the ID from a given string
 func IDFromString(s string) (ID, error) {
 	b := base58.Decode(s)
+	println("DBG id", s)
 	return IDFromBytes(b)
 }
 
