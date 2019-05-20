@@ -14,7 +14,7 @@ import (
 	"github.com/ethereum/go-ethereum/accounts"
 	"github.com/ethereum/go-ethereum/accounts/keystore"
 	"github.com/ethereum/go-ethereum/crypto"
-	common3 "github.com/iden3/go-iden3/common"
+	// common3 "github.com/iden3/go-iden3/common"
 	"github.com/iden3/go-iden3/core"
 	"github.com/iden3/go-iden3/services/signedpacketsrv"
 	"github.com/iden3/go-iden3/services/signsrv"
@@ -58,14 +58,20 @@ const proofKSignJSON = `
 
 const namesFileContent = `
 {
-  "iden3.io": "0x0123456789abcdef0123456789abcdef01234567"
+  "iden3.io": "1N7d2qVEJeqnYAWVi5Cq6PLj6GwxaW6FYcfmY2fps"
 }
 `
 
 const entititesFileContent = `
 {
-  "0x0123456789abcdef0123456789abcdef01234567": {
-    "name": "iden3-test-relay",
+  "11AVZrKNJVqDJoyKrdyaAgEynyBEjksV5z2NjZoWij": {
+    "name": "iden3-test-relay2",
+    "kOpAddr": "0x7633bc9012f924100fae50d6dda7162b0bba720d",
+    "kOpPub": "0x036d94c84a7096c572b83d44df576e1ffb3573123f62099f8d4fa19de806bd4d59",
+    "trusted": { "relay": true }
+  },
+  "1N7d2qVEJeqnYAWVi5Cq6PLj6GwxaW6FYcfmY2fps": {
+    "name": "iden3-test-relay3",
     "kOpAddr": "0xe0fbce58cfaa72812103f003adce3f284fe5fc7c",
     "kOpPub": "0x036d94c84a7096c572b83d44df576e1ffb3573123f62099f8d4fa19de806bd4d59",
     "trusted": { "relay": true }
@@ -76,9 +82,16 @@ const entititesFileContent = `
 const urlNotificationService = "http://127.0.0.1:10000/api/unstable"
 
 const passphrase = "secret"
-const relaySkHex = "79156abe7fe2fd433dc9df969286b96666489bac508612d0e16593e944c4f69f"
-const idAddrHex = "0x308eff1357e7b5881c00ae22463b0f69a0d58adb"
-const sendIdAddrHex = "0xdcde41e52633bcf03c68248b54fc48875acc978f"
+
+// const relaySkHex = "79156abe7fe2fd433dc9df969286b96666489bac508612d0e16593e944c4f69f"
+
+// const idAddrHex = "0x308eff1357e7b5881c00ae22463b0f69a0d58adb"
+const idAddrB58 = "1pnWU7Jdr4yLxp1azs1r1PpvfErxKGRQdcLBZuq3Z"
+
+// const sendIdAddrHex = "0xdcde41e52633bcf03c68248b54fc48875acc978f"
+const sendIdAddrB58 = "1pquYVpccuB491VyD3rEwhqJXUiKGJonbdxcWorpz"
+
+// const keySignSkHex = "79156abe7fe2fd433dc9df969286b96666489bac508612d0e16593e944c4f69f"
 const keySignSkHex = "0b8bdda435a144fc12764c0afe4ac9e2c4d544bf5692d2a6353ec2075dc1fcb4"
 
 var proofKSign core.ProofClaim
@@ -113,8 +126,13 @@ func setup() {
 		panic(err)
 	}
 	fmt.Printf("%+v\n", proofKSign)
-	common3.HexDecodeInto(idAddr[:], []byte(idAddrHex))
-	common3.HexDecodeInto(sendIdAddr[:], []byte(sendIdAddrHex))
+	if idAddr, err = core.IDFromString(idAddrB58); err != nil {
+		panic(err)
+	}
+
+	if sendIdAddr, err = core.IDFromString(sendIdAddrB58); err != nil {
+		panic(err)
+	}
 	signer, err := signsrv.New(keyStore, account)
 	if err != nil {
 		panic(err)
