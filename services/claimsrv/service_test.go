@@ -2,6 +2,7 @@ package claimsrv
 
 import (
 	"crypto/ecdsa"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
@@ -109,7 +110,7 @@ func initializeEnvironment(t *testing.T) {
 		t.Error(err)
 	}
 
-	idAddr, err := core.IDFromString("1pnWU7Jdr4yLxp1azs1r1PpvfErxKGRQdcLBZuq3Z")
+	idAddr, err := core.IDFromString("11AVZrKNJVqDJoyKrdyaAgEynyBEjksV5z2NjZoWij")
 	assert.Nil(t, err)
 	service = New(idAddr, mt, &RootServiceMock{}, &SignServiceMock{})
 
@@ -120,6 +121,8 @@ func initializeEnvironment(t *testing.T) {
 	}
 	relayPubKey = relaySecKey.Public().(*ecdsa.PublicKey)
 	relayAddr = crypto.PubkeyToAddress(*relayPubKey)
+	fmt.Println("relayAddr", relayAddr.Hex())
+	fmt.Println("relayPubKey", common3.HexEncode(crypto.CompressPubkey(relayPubKey)))
 }
 
 func TestGetNextVersion(t *testing.T) {
@@ -219,7 +222,7 @@ func TestGetClaimProof(t *testing.T) {
 	claimBasic := core.NewClaimBasic(indexSlot, dataSlot)
 
 	// KSign Claim
-	sk, err := crypto.HexToECDSA("7517685f1693593d3263460200ed903370c2318e8ba4b9bb5727acae55c32b3d")
+	sk, err := crypto.HexToECDSA("0b8bdda435a144fc12764c0afe4ac9e2c4d544bf5692d2a6353ec2075dc1fcb4")
 	if err != nil {
 		panic(err)
 	}
@@ -238,12 +241,26 @@ func TestGetClaimProof(t *testing.T) {
 	err = userMT.Add(claimAuthKSign.Entry())
 	assert.Nil(t, err)
 
+	// fmt.Println("leaf 0", hex.EncodeToString(claimAuthKSign.Entry().Data[0][:]))
+	// fmt.Println("leaf 1", hex.EncodeToString(claimAuthKSign.Entry().Data[1][:]))
+	// fmt.Println("leaf 2", hex.EncodeToString(claimAuthKSign.Entry().Data[2][:]))
+	// fmt.Println("leaf 3", hex.EncodeToString(claimAuthKSign.Entry().Data[3][:]))
+	// fmt.Println("hi", claimAuthKSign.Entry().HIndex().Hex())
+	// fmt.Println("hv", claimAuthKSign.Entry().HValue().Hex())
+
 	// setRootClaim of the user in the Relay Merkle Tree
 	setRootClaim := core.NewClaimSetRootKey(idAddr, *userMT.RootKey())
 	// setRootClaim.BaseIndex.Version++ // TODO autoincrement
 	// add User's ID Merkle Root into the Relay's Merkle Tree
 	err = mt.Add(setRootClaim.Entry())
 	assert.Nil(t, err)
+
+	fmt.Println("leaf 0", hex.EncodeToString(setRootClaim.Entry().Data[0][:]))
+	fmt.Println("leaf 1", hex.EncodeToString(setRootClaim.Entry().Data[1][:]))
+	fmt.Println("leaf 2", hex.EncodeToString(setRootClaim.Entry().Data[2][:]))
+	fmt.Println("leaf 3", hex.EncodeToString(setRootClaim.Entry().Data[3][:]))
+	fmt.Println("hi", setRootClaim.Entry().HIndex().Hex())
+	fmt.Println("hv", setRootClaim.Entry().HValue().Hex())
 
 	proofClaim, err := service.GetClaimProofByHi(setRootClaim.Entry().HIndex())
 	assert.Nil(t, err)
