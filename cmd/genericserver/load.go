@@ -1,6 +1,7 @@
 package genericserver
 
 import (
+	"fmt"
 	"io/ioutil"
 	"os"
 	"strings"
@@ -207,4 +208,57 @@ func LoadSignedPacketSigner(ks *babykeystore.KeyStore, pk *babyjub.PublicKey, cl
 		panic(err)
 	}
 	return signedpacketsrv.NewSignedPacketSigner(*signer, *proofKSign, C.Id)
+}
+
+func LoadGenesis() (*core.GenesisProofClaims, error) {
+	kOp := C.Keys.BabyJub.KOp
+	kDis := C.Keys.Ethereum.KDis
+	kReen := C.Keys.Ethereum.KReen
+	kUpdateRoot := C.Keys.Ethereum.KUpdateRoot
+	id, proofClaims, err := core.CalculateIdGenesis(kOp, kDis, kReen, kUpdateRoot)
+
+	if *id != C.Id {
+		return nil, fmt.Errorf("Configuration id doesn't match calculated genesis id")
+	}
+
+	storage, err := db.NewLevelDbStorage(C.Storage.Path, false)
+	if err != nil {
+		return nil, fmt.Errorf("Error creating level DB storage: %v", err)
+	}
+	mtstorage := storage.WithPrefix(dbMerkletreePrefix)
+	mt, err := merkletree.NewMerkleTree(mtstorage, 140)
+	if err != nil {
+		return nil, fmt.Errorf("Error creating merkle tree: %v", err)
+	}
+
+	kvs, err := mtstorage.List(1)
+	if err != nil {
+		return nil, fmt.Errorf("Error listing level DB storage: %v", err)
+	}
+	proofClaimsList := []core.ProofClaim{proofClaims.KOp, proofClaims.KDis,
+		proofClaims.KReen, proofClaims.KUpdateRoot}
+	if len(kvs) == 0 {
+		// Merklee tree DB is empty
+		// Add genesis claims to merkle tree
+		for _, proofClaim := range proofClaimsList {
+			if err := mt.Add(&merkletree.Entry{Data: *proofClaim.Leaf}); err != nil {
+				return nil, fmt.Errorf("Error adding claim to merkle tree: %v", err)
+			}
+		}
+	} else {
+		// MerkleTree DB has already been initialized
+		// Check that the geneiss claims are in the merkle tree
+		for _, proofClaim := range proofClaimsList {
+			entry := merkletree.Entry{Data: *proofClaim.Leaf}
+			data, err := mt.GetDataByIndex(entry.HIndex())
+			if err != nil {
+				return nil, fmt.Errorf("Error getting claim from the merkle tree: %v", err)
+			}
+			if entry.Data.Equal(data) {
+				return nil, fmt.Errorf("Claim from the merkle tree doesn't match the expected claim")
+			}
+		}
+	}
+
+	return proofClaims, nil
 }
