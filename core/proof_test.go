@@ -50,14 +50,14 @@ func TestProof(t *testing.T) {
 	err = mt.Add(claim1.Entry())
 	assert.Nil(t, err)
 
-	mtp, err := GetClaimProofByHi(mt, claim0.Entry().HIndex())
+	cp, err := GetClaimProofByHi(mt, claim0.Entry().HIndex())
 	assert.Nil(t, err)
 
-	// j, err := json.Marshal(mtp)
+	// j, err := json.Marshal(cp)
 	// assert.Nil(t, err)
 
 	// id := ID{}
-	verified, err := VerifyProofClaim(mtp)
+	verified, err := cp.Verify(cp.Proof.Root)
 	assert.Nil(t, err)
 	assert.True(t, verified)
 }
@@ -168,11 +168,11 @@ func TestGetPredicateProof(t *testing.T) {
 	assert.Nil(t, err)
 	oldRoot := mt.RootKey()
 
-	mtp, err := GetClaimProofByHi(mt, claim0.Entry().HIndex())
+	cp, err := GetClaimProofByHi(mt, claim0.Entry().HIndex())
 	assert.Nil(t, err)
 
 	// id := ID{}
-	verified, err := VerifyProofClaim(mtp)
+	verified, err := cp.Verify(cp.Proof.Root)
 	assert.Nil(t, err)
 	assert.True(t, verified)
 

@@ -85,13 +85,19 @@ func (ra *RelayAux) ClaimAuthRelay() *merkletree.Entry {
 	return NewClaimAuthorizeService(ServiceTypeRelay, ra.RelayID.String(), "", "").Entry()
 }
 
+type RootData struct {
+	BlockN         uint64
+	BlockTimestamp int64
+	Root           *merkletree.Hash
+}
+
 // ProofClaim is a complete proof of a claim that includes all the proofs of
 // existence and non-existence for mutliple levels from the claim of a tree to
 // the signed root of possibly another tree whose root binding:"required".
 type ProofClaim struct {
 	Claim          *merkletree.Entry `json:"claim" binding:"required"`
 	ID             *ID               `json:"id" binding:"required"`
-	BlockN         int64             `json:"blockN" binding:"required"`
+	BlockN         uint64            `json:"blockN" binding:"required"`
 	BlockTimestamp int64             `json:"blockTS" binding:"required"`
 	Proof          ProofClaimPartial `json:"proof" binding:"required,dive"`
 
@@ -109,7 +115,61 @@ func (pc *ProofClaim) String() string {
 	return buf.String()
 }
 
-func VerifyGenesisProof(id *ID, proof *merkletree.Proof, hIndex, hValue *merkletree.Hash) (bool, error) {
+// PublishedData returns the id of the root publisher with the corresponding
+// block number and block timestamp linked to publish the root.
+func (pc *ProofClaim) PublishedData() (*ID, uint64, int64) {
+	var publisherID *ID
+	if pc.RelayAux != nil {
+		publisherID = pc.RelayAux.RelayID
+	} else {
+		publisherID = pc.ID
+	}
+	return publisherID, pc.BlockN, pc.BlockTimestamp
+
+}
+
+// CheckProofClaim checks the claim proofs from the bottom to the top are valid and not revoked, and that the top root is signed by relayAddr.
+// Returns either (false, nil) or (true, error)
+// TODO Check id-root in the blockchain!
+func (pc *ProofClaim) Verify(publishedRoot *merkletree.Hash) (bool, error) {
+	var publisherClaim *merkletree.Entry
+	if pc.RelayAux != nil {
+		relayAux := pc.RelayAux
+		// Verify that the identity has authorized the relay ID in a genesis claim
+		proofClaimAuthRelay := relayAux.ProofClaimAuthRelay(pc.ID)
+		if ok, err := proofClaimAuthRelay.Verify(relayAux.ClaimAuthRelay()); ok != true {
+			return false, fmt.Errorf("verification of ProofClaim.RelayAux.ProofClaimAuthRelay failed: %v", err)
+		}
+		// Verify that the claim is under the identity MT
+		if ok, err := relayAux.Proof.Verify(pc.Claim); ok != true {
+			return false, fmt.Errorf("verification of ProofClaim.RelayAux.Proof failed: %v", err)
+		}
+		// Construct setRootClaim from the identity root
+		setRootClaim, err := NewClaimSetRootKey(pc.ID, relayAux.Proof.Root)
+		if err != nil {
+			return false, err
+		}
+		setRootClaim.Version = relayAux.Version
+		setRootClaim.Era = relayAux.Era
+		publisherClaim = setRootClaim.Entry()
+	} else {
+		publisherClaim = pc.Claim
+	}
+
+	// Verify that the publisherClaim is in the publisher MT
+	if ok, err := pc.Proof.Verify(publisherClaim); ok != true {
+		return false, fmt.Errorf("verification of ProofClaim.Proof failed: %v", err)
+	}
+
+	// Verify that the root matches with the published root passed as argument
+	if !pc.Proof.Root.Equals(publishedRoot) {
+		return false, fmt.Errorf("ProofClaim root doesn't match the expected published root")
+	}
+
+	return true, nil
+}
+
+func VerifyGenesisMTProof(id *ID, proof *merkletree.Proof, hIndex, hValue *merkletree.Hash) (bool, error) {
 	root, err := merkletree.RootFromProof(proof, hIndex, hValue)
 	if err != nil {
 		return false, err
@@ -133,55 +193,9 @@ func (p *ProofClaimGenesis) Verify(claim *merkletree.Entry) (bool, error) {
 	if !p.Mtp.Existence {
 		return false, fmt.Errorf("Mtp is a non-existence proof")
 	}
-	if ok, err := VerifyGenesisProof(p.Id, p.Mtp, claim.HIndex(), claim.HValue()); !ok {
+	if ok, err := VerifyGenesisMTProof(p.Id, p.Mtp, claim.HIndex(), claim.HValue()); !ok {
 		return false, fmt.Errorf("Mtp doesn't match with the genesis Id: %v", err)
 	}
-	return true, nil
-}
-
-// CheckProofClaim checks the claim proofs from the bottom to the top are valid and not revoked, and that the top root is signed by relayAddr.
-// Returns either (false, nil) or (true, error)
-// TODO Check id-root in the blockchain!
-func VerifyProofClaim(pc *ProofClaim) (bool, error) {
-
-	var publisherClaim *merkletree.Entry
-	var publisherID *ID
-	if pc.RelayAux != nil {
-		relayAux := pc.RelayAux
-		// Verify that the identity has authorized the relay ID in a genesis claim
-		proofClaimAuthRelay := relayAux.ProofClaimAuthRelay(pc.ID)
-		if ok, err := proofClaimAuthRelay.Verify(relayAux.ClaimAuthRelay()); ok != true {
-			return false, fmt.Errorf("verification of ProofClaim.RelayAux.ProofClaimAuthRelay failed: %v", err)
-		}
-		// Verify that the claim is under the identity MT
-		if ok, err := relayAux.Proof.Verify(pc.Claim); ok != true {
-			return false, fmt.Errorf("verification of ProofClaim.RelayAux.Proof failed: %v", err)
-		}
-		// Construct setRootClaim from the identity root
-		setRootClaim, err := NewClaimSetRootKey(pc.ID, relayAux.Proof.Root)
-		if err != nil {
-			return false, err
-		}
-		setRootClaim.Version = relayAux.Version
-		setRootClaim.Era = relayAux.Era
-		publisherClaim = setRootClaim.Entry()
-		publisherID = relayAux.RelayID
-	} else {
-		publisherClaim = pc.Claim
-		publisherID = pc.ID
-	}
-
-	// Verify that the publisherClaim is in the publisher MT
-	if ok, err := pc.Proof.Verify(publisherClaim); ok != true {
-		return false, fmt.Errorf("verification of ProofClaim.Proof failed: %v", err)
-	}
-
-	// TODO: Query the roots smart contract for publisherID, pc.BlockN -> pc.Proof.Root
-	// Verify that the publisher root matches with its ID in the smart contract
-	if publisherID != nil {
-		return false, fmt.Errorf("TODO")
-	}
-
 	return true, nil
 }
 

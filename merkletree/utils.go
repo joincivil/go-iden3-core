@@ -4,6 +4,7 @@ import (
 	"encoding/hex"
 	// "encoding/json"
 	// "fmt"
+	"bytes"
 	"math/big"
 	"strings"
 
@@ -36,6 +37,10 @@ func (h *Hash) MarshalText() ([]byte, error) {
 
 func (h *Hash) UnmarshalText(bs []byte) error {
 	return common3.HexDecodeInto(h[:], bs)
+}
+
+func (h1 *Hash) Equals(h2 *Hash) bool {
+	return bytes.Equal(h1[:], h2[:])
 }
 
 // ElemsBytesToRElemsPanic converts an array of ElemBytes to an array of
