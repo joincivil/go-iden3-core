@@ -1,6 +1,7 @@
 package ethsrv
 
 import (
+	"fmt"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/iden3/go-iden3-core/core"
@@ -14,6 +15,7 @@ type Service interface {
 	GetRoot(id *core.ID) (*core.RootData, error)
 	GetRootByBlock(id *core.ID, blockN uint64) (merkletree.Hash, error)
 	GetRootByTime(id *core.ID, blockTimestamp int64) (merkletree.Hash, error)
+	VerifyProofClaim(pc *core.ProofClaim) (bool, error)
 
 	Client() *eth.Client2
 }
@@ -77,6 +79,31 @@ func (s *ServiceImpl) GetRootByTime(id *core.ID, blockTimestamp int64) (merkletr
 		return err
 	})
 	return merkletree.Hash(root), err
+}
+
+func (s *ServiceImpl) VerifyProofClaim(pc *core.ProofClaim) (bool, error) {
+	if ok, err := pc.Verify(pc.Proof.Root); !ok {
+		return false, err
+	}
+	id, blockN, blockTime := pc.PublishedData()
+	rootByBlock, err := s.GetRootByBlock(id, blockN)
+	if err != nil {
+		return false, err
+	}
+	rootByTime, err := s.GetRootByTime(id, blockTime)
+	if err != nil {
+		return false, err
+	}
+
+	if !pc.Proof.Root.Equals(&rootByBlock) {
+		return false, fmt.Errorf("ProofClaim Root doesn't match the one " +
+			"from the smart contract queried by (id, blockN)")
+	}
+	if !pc.Proof.Root.Equals(&rootByTime) {
+		return false, fmt.Errorf("ProofClaim Root doesn't match the one " +
+			"from the smart contract queried by (id, blockTime)")
+	}
+	return true, nil
 }
 
 func (s *ServiceImpl) Client() *eth.Client2 {
